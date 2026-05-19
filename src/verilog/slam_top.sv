@@ -33,9 +33,11 @@ slam_top
     .IMG_DIN_TDATA   (  ), //  in, [PW_IMG-1:0] 
     .IMG_DIN_TVALID  (  ), //  in,              
     .IMG_DIN_TREADY  (  ), // out,              
+    .IMG_DIN_TLAST   (  ), // out,              
     .IMG_DOUT_TDATA  (  ), // out, [PW_IMG-1:0] 
     .IMG_DOUT_TVALID (  ), // out,              
-    .IMG_DOUT_TREADY (  )  //  in,              
+    .IMG_DOUT_TREADY (  ), //  in,              
+    .IMG_DOUT_TLAST  (  )  //  in,              
     );
 */
 module slam_top
@@ -51,10 +53,12 @@ module slam_top
     input  wire [PW_IMG-1:0] IMG_DIN_TDATA,
     input  wire              IMG_DIN_TVALID,
     output wire              IMG_DIN_TREADY,
+    input  wire              IMG_DIN_TLAST,
     
     output wire [PW_IMG-1:0] IMG_DOUT_TDATA,
     output wire              IMG_DOUT_TVALID,
-    input  wire              IMG_DOUT_TREADY  
+    input  wire              IMG_DOUT_TREADY,  
+    output wire              IMG_DOUT_TLAST  
     );
  
 clahe_hist 
@@ -69,9 +73,11 @@ clahe_hist
     .IMG_DIN_TDATA   ( IMG_DIN_TDATA   ), //  in, [PW_IMG-1:0] 
     .IMG_DIN_TVALID  ( IMG_DIN_TVALID  ), //  in,              
     .IMG_DIN_TREADY  ( IMG_DIN_TREADY  ), // out,              
+    .IMG_DIN_TLAST   ( IMG_DIN_TLAST   ), // out,              
     .IMG_DOUT_TDATA  ( IMG_DOUT_TDATA  ), // out, [PW_IMG-1:0] 
     .IMG_DOUT_TVALID ( IMG_DOUT_TVALID ), // out,              
-    .IMG_DOUT_TREADY ( IMG_DOUT_TREADY )  //  in,              
+    .IMG_DOUT_TREADY ( IMG_DOUT_TREADY ), //  in,              
+    .IMG_DOUT_TLAST  ( IMG_DOUT_TLAST  )  //  in,              
     ); 
 
 

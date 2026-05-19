@@ -37,9 +37,13 @@ wire                w_img_din_tready;
 
 
 reg              r_img_din_tvalid  = 'b0;
-reg [PW_IMG-1:0] r_img_din_tdata   = 'b0;
+wire             w_s_img_din_tready;
+reg  [PW_IMG-1:0]r_img_din_tdata   = 'b0;
 reg              r_img_din_tlast   = 'b0;
+wire             w_img_din_tvalid ;
 wire             w_img_din_tready ;
+wire [PW_IMG-1:0]w_img_din_tdata ;
+wire             w_img_din_tlast ;
 parameter PERIOD = 20;
 initial begin
     CLK = 0;
@@ -61,6 +65,7 @@ slam_top
     .IMG_DIN_TDATA   ( w_img_din_tdata  ), //  in, [PW_IMG-1:0] 
     .IMG_DIN_TVALID  ( w_img_din_tvalid ), //  in,              
     .IMG_DIN_TREADY  ( w_img_din_tready ), // out,              
+    .IMG_DIN_TLAST   ( w_img_din_tlast  ), // out,              
     .IMG_DOUT_TDATA  (  ), // out, [PW_IMG-1:0] 
     .IMG_DOUT_TVALID (  ), // out,              
     .IMG_DOUT_TREADY (  )  //  in,              
@@ -71,7 +76,7 @@ axis_data_fifo_0 axis_data_fifo_0 (
   .s_axis_aresetn   ( ~RST             ), // input wire s_axis_aresetn         
   .s_axis_aclk      ( CLK              ), // input wire s_axis_aclk                 
   .s_axis_tvalid    ( r_img_din_tvalid ), // input wire s_axis_tvalid           
-  .s_axis_tready    ( r_img_din_tready ), // output wire s_axis_tready          
+  .s_axis_tready    ( w_s_img_din_tready ), // output wire s_axis_tready          
   .s_axis_tdata     ( r_img_din_tdata  ), // input wire [7 : 0] s_axis_tdata      
   .s_axis_tlast     ( r_img_din_tlast  ), // input wire s_axis_tlast              
   .m_axis_tvalid    ( w_img_din_tvalid ), // output wire m_axis_tvalid          
@@ -88,7 +93,10 @@ always @( posedge(CLK) )
     begin
         if ( r_init_done && ~w_prog_full )
             begin
-                r_img_din_tdata  <= r_img_din_tdata + 1;
+                if ( r_img_din_tdata == 'd31)
+                    r_img_din_tdata  <= 'b0;
+                else
+                    r_img_din_tdata  <= r_img_din_tdata + 1;
                 r_img_din_tvalid <= 1'b1;
                 r_img_din_tlast  <= ( r_cnt_y == (P_MAX_H-1)) & ( r_cnt_x == (P_MAX_W-1) );
                 if ( r_cnt_x == (P_MAX_W-1) )
@@ -117,7 +125,7 @@ initial begin
     @(posedge(CLK));
     #1;
     RST = 0;
-    #(PERIOD*4);
+    #(PERIOD*40);
     r_init_done = 1;
 end
 
