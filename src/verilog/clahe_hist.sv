@@ -92,9 +92,7 @@ reg                                  r_tile_line_done = 1'b0;
 
 // Count pixels to define the number of the current tile:
 always @(posedge(CLK))
-    begin
-    
-        
+    begin 
         if ( RST )
             r_hist_x <= 'b0;
         else if ( IMG_DIN_TVALID && IMG_DIN_TREADY 
@@ -150,8 +148,12 @@ reg  [13:0] r_hist_val_addra;
 reg  [17:0] r_hist_val_dina; 
 wire [17:0] w_hist_val_douta;   
 reg  [13:0] r_hist_val_addrb; 
+reg  [13:0] r_hist_val_addrb_d; 
 reg         r_hist_zero_wr_b;
+reg         r_hist_val_dv_b;
 wire [17:0] w_hist_val_doutb;
+wire [13:0] w_hist_val_doutb_addr = r_hist_val_addrb_d;
+wire        w_hist_val_doutb_dv   = r_hist_val_dv_b;
 
 wire        w_rst_busy_a;
 wire        w_rst_busy_b;
@@ -180,6 +182,7 @@ reg               r_img_din_data_dv_d = 1'b0;
 always @(posedge(CLK))
     begin
         r_hist_val_addra  <= (IMG_DIN_TVALID & IMG_DIN_TREADY)? {r_hist_y, r_hist_x, r_img_din_data} : r_hist_val_addra;
+        r_hist_val_addrb_d<= r_hist_val_addrb;
         r_img_din_data    <= (IMG_DIN_TVALID & IMG_DIN_TREADY)? IMG_DIN_TDATA : r_img_din_data;
         r_img_din_data_dv <=  IMG_DIN_TVALID & IMG_DIN_TREADY;
         r_img_din_data_dv_d <= r_img_din_data_dv;
@@ -195,6 +198,7 @@ always @(posedge(CLK))
 // read hist:
 always @(posedge(CLK))
     begin
+        r_hist_val_dv_b <= r_hist_zero_wr_b;
         if ( r_tile_line_done )
             begin
                 r_hist_val_addrb <= {r_hist_val_addra[$clog2(P_MAX_TILE-1) + PW_IMG +: $clog2(P_MAX_TILE-1)  ], {($clog2(P_MAX_TILE-1)){1'b0}}, 8'b0};
@@ -210,6 +214,171 @@ always @(posedge(CLK))
                 r_hist_val_addrb <= r_hist_val_addrb;
                 r_hist_zero_wr_b <= 1'b0;
             end
-    end       
+    end    
+    
+// clip val and accum excess:
+reg  [17:0]         r_clip_thr = 9;
+reg  [17:0]         r_hist_val_clipped;
+reg                 r_hist_val_clipped_first=1'b0; 
+reg  [13:0]         r_hist_val_clipped_addr;
+reg                 r_hist_val_clipped_dv;
+reg  [PW_IMG+17:0]  r_hist_val_excess = 'b0; 
+reg  [17:0]         r_hist_val_add_saved = 'b0;
+always @(posedge(CLK))
+    begin
+        r_hist_val_clipped_dv   <= w_hist_val_doutb_dv;
+        r_hist_val_clipped_addr <= w_hist_val_doutb_addr;
+        r_hist_val_clipped_first<= w_hist_val_doutb_dv & (w_hist_val_doutb_addr[PW_IMG-1:0] == 0);
+        if ( w_hist_val_doutb_dv )
+            begin 
+                if ( w_hist_val_doutb > r_clip_thr )
+                    begin
+                        if ( w_hist_val_doutb_addr[PW_IMG-1:0] == 0 )
+                            r_hist_val_excess <= w_hist_val_doutb - r_clip_thr;
+                        else
+                            r_hist_val_excess <= r_hist_val_excess + w_hist_val_doutb - r_clip_thr;
+                    end
+                else if ( w_hist_val_doutb_addr[PW_IMG-1:0] == 0 )
+                    r_hist_val_excess <= 'b0; 
+                    
+                if ( w_hist_val_doutb > r_clip_thr )
+                    r_hist_val_clipped <= r_clip_thr;
+                else
+                    r_hist_val_clipped <= w_hist_val_doutb;
+            end
+        
+        if (w_hist_val_doutb_dv && w_hist_val_doutb_addr[PW_IMG-1:0] == 0 )
+            begin  
+                if ( r_hist_val_excess >= (2**PW_IMG) )
+                    r_hist_val_add_saved <= r_hist_val_excess[PW_IMG +: 18]; 
+            end 
+    end    
+    
+// delay clipped values while find min of cdf and excess:
+localparam LP_DELAY = 256;
+reg  [17:0] r_delay_clipped_vals      [0:LP_DELAY-1];
+reg         r_delay_clipped_vals_first[0:LP_DELAY-1];
+reg         r_delay_clipped_vals_dv   [0:LP_DELAY-1];
+wire [17:0] w_delayed_clipped_vals      = r_delay_clipped_vals      [LP_DELAY-1];
+wire        w_delayed_clipped_vals_first= r_delay_clipped_vals_first[LP_DELAY-1];
+wire        w_delayed_clipped_vals_dv   = r_delay_clipped_vals_dv   [LP_DELAY-1];
+always @(posedge(CLK))    
+    begin
+        r_delay_clipped_vals      <= { r_hist_val_clipped      , r_delay_clipped_vals      [0:LP_DELAY-2]};
+        r_delay_clipped_vals_first<= { r_hist_val_clipped_first, r_delay_clipped_vals_first[0:LP_DELAY-2]};
+        r_delay_clipped_vals_dv   <= { r_hist_val_clipped_dv   , r_delay_clipped_vals_dv   [0:LP_DELAY-2]};
+    end           
+    
+// find cdf:
+reg  [PW_IMG+17:0] r_cdf = 'b0;
+reg                r_cdf_dv;
+reg                r_cdf_first;
+always @(posedge(CLK))
+    begin
+        r_cdf_dv    <= w_delayed_clipped_vals_dv;
+        r_cdf_first <= w_delayed_clipped_vals_first;
+        if ( w_delayed_clipped_vals_dv )
+            begin
+                if ( w_delayed_clipped_vals_first )
+                    begin 
+                        r_cdf <= w_delayed_clipped_vals + r_hist_val_add_saved; 
+                    end
+                else
+                    begin
+                        r_cdf <= r_cdf +  r_hist_val_add_saved + w_delayed_clipped_vals;
+                    end
+            end
+    end    
+    
+// find first non-zero value and sub it form all other values:
+reg  [       18:0] r_total_pix = 'd1200;
+reg  [       18:0] r_denom     = 'd1;
+reg  [PW_IMG+17:0] r_cdf_min = 'b0;
+reg  [PW_IMG+17:0] r_cdf_m = 'b0;
+reg                r_cdf_m_dv;
+reg                r_cdf_m_first;
+always @(posedge(CLK))
+    begin
+        r_cdf_m_dv    <= r_cdf_dv;
+        r_cdf_m_first <= r_cdf_first;
+        if ( r_cdf_dv )
+            begin
+                if ( r_cdf_first ) 
+                    begin
+                        r_cdf_min <= r_cdf;
+                        r_cdf_m   <= 'b0;
+                        r_denom   <= r_total_pix - r_cdf;
+                    end 
+                else
+                    begin
+                        if ( !r_cdf_min )
+                            begin
+                                r_cdf_min <= r_cdf;
+                                r_cdf_m   <= 'b0;
+                                r_denom   <= r_total_pix - r_cdf;
+                            end
+                        else
+                            begin
+                                r_cdf_min <= r_cdf_min;
+                                r_cdf_m   <= r_cdf - r_cdf_min;
+                                r_denom   <= r_total_pix - r_cdf_min;
+                            end 
+                    end
+            end
+    end    
+
+wire [PW_IMG+17+PW_IMG:0] w_cdf_255x = {r_cdf_m, 8'b0} - {8'b0, r_cdf_m};
+wire [23:0] w_divisor = {5'b0, r_denom};     
+wire [39:0] s_axis_dividend_tdata = { {(40-PW_IMG*2-18){1'b0}}, w_cdf_255x};
+wire        w_m_div_tvalid;
+wire        w_m_div_tlast ;
+wire [63:0] w_m_div_tdata ;     
+wire [33:0] w_quot = w_m_div_tdata[57:24];
+cdf_divide cdf_divide (
+  .aclk                     ( CLK                   ), // input wire aclk                                                                
+  .s_axis_divisor_tvalid    ( r_cdf_m_dv            ), // input wire s_axis_divisor_tvalid            
+  .s_axis_divisor_tdata     ( w_divisor             ), // input wire [23 : 0] s_axis_divisor_tdata      
+  .s_axis_dividend_tvalid   ( r_cdf_m_dv            ), // input wire s_axis_dividend_tvalid         
+  .s_axis_dividend_tlast    ( r_cdf_m_first         ), // input wire s_axis_dividend_tlast            
+  .s_axis_dividend_tdata    ( s_axis_dividend_tdata ), // input wire [39 : 0] s_axis_dividend_tdata   
+  .m_axis_dout_tvalid       ( w_m_div_tvalid        ), // output wire m_axis_dout_tvalid                    
+  .m_axis_dout_tlast        ( w_m_div_tlast         ), // output wire m_axis_dout_tlast                       
+  .m_axis_dout_tdata        ( w_m_div_tdata         )  // output wire [63 : 0] m_axis_dout_tdata              
+);    
+
+
+// add address info to LUT data:
+reg  [ 7:0] r_lut;
+reg  [$clog2(P_MAX_TILE-1)*2+PW_IMG-1:0] r_lut_addr = 'b0;
+reg         r_lut_dv;
+always @( posedge(CLK) )
+    begin
+        r_lut_dv <= w_m_div_tvalid;
+        if ( w_m_div_tvalid )
+            begin
+//                if ( w_m_div_tlast )
+//                    begin
+//                        if ( r_lut_addr[PW_IMG +: $clog2(P_MAX_TILE-1)] == r_clahe_tiles_minus_one )
+//                            begin
+//                            r_lut_addr[PW_IMG +: $clog2(P_MAX_TILE-1)] <= 'b0;
+                            
+//                            end
+//                        else
+//                            r_lut_addr[PW_IMG +: $clog2(P_MAX_TILE-1)] <= r_lut_addr[PW_IMG +: $clog2(P_MAX_TILE-1)] + 1'b1;
+//                    end
+                    
+                if ( w_m_div_tlast )
+                    r_lut_addr[PW_IMG-1:0] <= 'b0;
+                else  
+                    r_lut_addr[PW_IMG-1:0] <= r_lut_addr[PW_IMG-1:0] + 1'b1;
+                
+                if ( w_quot >= 256 )
+                    r_lut <= 'd255;
+                else
+                    r_lut <= w_quot[7:0];
+            end
+    end
+
+    
 endmodule
 `default_nettype wire
