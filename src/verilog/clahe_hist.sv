@@ -26,47 +26,75 @@ clahe_hist
     .P_MAX_TILE (  ),
     .P_MAX_W    (  ),
     .P_MAX_H    (  ),
-    .PW_IMG     (  )
+    .PW_IMG     (  ),
+    .PW_LUT_ADDR(  )
 ) clahe_hist (
     .CLK             (  ), //  in,              
     .RST             (  ), //  in,               
-    .IMG_DIN_TDATA   (  ), //  in, [PW_IMG-1:0] 
+    
+    // Grayscale image from sensor:
+    .IMG_DIN_TDATA   (  ), //  in, [PW_IMG-1:0] , AXIS TDATA,
     .IMG_DIN_TVALID  (  ), //  in,              
-    .IMG_DIN_TREADY  (  ), // out,              
+    .IMG_DIN_TREADY  (  ), // out,             
+    .IMG_DIN_TLAST   (  ), //  in,             
+    
+    // CLAHE Lut result:
+    .LUT_DOUT        (  ), // out, [PW_IMG-1:0] 
+    .LUT_DOUT_ADDR   (  ), // out, [PW_LUT_ADDR-1:0]
+    .LUT_DOUT_DV     (  ), // out, 
+    
+    // Grayscale Image to DDR-FIFO: 
     .IMG_DOUT_TDATA  (  ), // out, [PW_IMG-1:0] 
     .IMG_DOUT_TVALID (  ), // out,              
-    .IMG_DOUT_TREADY (  )  //  in,              
+    .IMG_DOUT_TREADY (  ), //  in,            
+    .IMG_DIN_TLAST   (  )  // out,               
     );
 */
 module clahe_hist
 #(
-    parameter P_MAX_TILE =    8,
-    parameter P_MAX_W    = 1920,
-    parameter P_MAX_H    = 1080,
-    parameter PW_IMG     =    8
+    parameter P_MAX_TILE  =    8,
+    parameter P_MAX_W     = 1920,
+    parameter P_MAX_H     = 1080,
+    parameter PW_IMG      =    8,
+    parameter PW_LUT_ADDR =    PW_IMG + $clog2(P_MAX_TILE-1) + $clog2(P_MAX_TILE-1) 
 )(
-    input  wire              CLK,
-    input  wire              RST,
+    input  wire                     CLK,
+    input  wire                     RST,
     
-    input  wire [PW_IMG-1:0] IMG_DIN_TDATA,
-    input  wire              IMG_DIN_TVALID,
-    output wire              IMG_DIN_TREADY,
-    input  wire              IMG_DIN_TLAST,
+    input  wire [PW_IMG-1:0]        IMG_DIN_TDATA,
+    input  wire                     IMG_DIN_TVALID,
+    output wire                     IMG_DIN_TREADY,
+    input  wire                     IMG_DIN_TLAST,
     
-    output wire [PW_IMG-1:0] IMG_DOUT_TDATA,
-    output wire              IMG_DOUT_TVALID,
-    input  wire              IMG_DOUT_TREADY,  
-    output wire              IMG_DOUT_TLAST  
+    output wire [PW_IMG-1:0]        LUT_DOUT,
+    output wire [PW_LUT_ADDR-1:0]   LUT_DOUT_ADDR,
+    output wire                     LUT_DOUT_DV, 
+    
+    output wire [PW_IMG-1:0]        IMG_DOUT_TDATA ,
+    output wire                     IMG_DOUT_TVALID,
+    input  wire                     IMG_DOUT_TREADY,  
+    output wire                     IMG_DOUT_TLAST  
     );
 
 
+wire w_fifo_dout_prog_full;
 reg  r_img_din_tready = 1'b0;
 assign IMG_DIN_TREADY = r_img_din_tready;
 reg [ 1:0] r_cnt = 'b0;
+
+// control IMG_DIN_TREADY to slow down input data
 always @(posedge(CLK))
     begin
-        r_cnt <= r_cnt + 1'b1;
-        r_img_din_tready <= &r_cnt;
+        if ( !w_fifo_dout_prog_full )
+            begin
+                r_cnt <= r_cnt + 1'b1;
+                r_img_din_tready <= &r_cnt;
+            end
+        else
+            begin
+                r_cnt            <= r_cnt;
+                r_img_din_tready <= 'b1;
+            end
     end
 // define reg, but want it to be BRAM..
 reg [$clog2(P_MAX_W*P_MAX_H)-1:0] r_hist_bram [0:P_MAX_TILE-1][0:P_MAX_TILE-1][0:(2**PW_IMG)-1];    
@@ -80,6 +108,21 @@ initial begin
                 end
         end
 end
+
+
+fifo_clahe_axis_dout fifo_clahe_axis_dout (
+  .s_axis_aresetn   ( ~RST                  ), // input wire s_axis_aresetn       
+  .s_axis_aclk      ( CLK                   ), // input wire s_axis_aclk                
+  .s_axis_tvalid    ( IMG_DIN_TVALID & IMG_DIN_TREADY ), // input wire s_axis_tvalid          
+  .s_axis_tready    (                       ), // output wire s_axis_tready         
+  .s_axis_tdata     ( IMG_DIN_TDATA         ), // input wire [7 : 0] s_axis_tdata     
+  .s_axis_tlast     ( IMG_DIN_TLAST         ), // input wire s_axis_tlast            
+  .m_axis_tdata     ( IMG_DOUT_TDATA        ), // output wire [7 : 0] m_axis_tdata          
+  .m_axis_tvalid    ( IMG_DOUT_TVALID       ), // output wire m_axis_tvalid         
+  .m_axis_tready    ( IMG_DOUT_TREADY       ), // input wire m_axis_tready     
+  .m_axis_tlast     ( IMG_DOUT_TLAST        ), // output wire m_axis_tlast            
+  .prog_full        ( w_fifo_dout_prog_full )  // output wire prog_full                     
+);
     
 reg [$clog2(P_MAX_W/P_MAX_TILE)-1:0] r_tile_cnt_x;
 reg [$clog2(P_MAX_W/P_MAX_TILE)-1:0] r_tile_cnt_y;
@@ -331,7 +374,8 @@ wire [PW_IMG+17+PW_IMG:0] w_cdf_255x = {r_cdf_m, 8'b0} - {8'b0, r_cdf_m};
 wire [23:0] w_divisor = {5'b0, r_denom};     
 wire [39:0] s_axis_dividend_tdata = { {(40-PW_IMG*2-18){1'b0}}, w_cdf_255x};
 wire        w_m_div_tvalid;
-wire        w_m_div_tlast ;
+wire        w_m_div_tfirst;
+wire        w_m_div_img_talst;
 wire [63:0] w_m_div_tdata ;     
 wire [33:0] w_quot = w_m_div_tdata[57:24];
 cdf_divide cdf_divide (
@@ -342,7 +386,7 @@ cdf_divide cdf_divide (
   .s_axis_dividend_tlast    ( r_cdf_m_first         ), // input wire s_axis_dividend_tlast            
   .s_axis_dividend_tdata    ( s_axis_dividend_tdata ), // input wire [39 : 0] s_axis_dividend_tdata   
   .m_axis_dout_tvalid       ( w_m_div_tvalid        ), // output wire m_axis_dout_tvalid                    
-  .m_axis_dout_tlast        ( w_m_div_tlast         ), // output wire m_axis_dout_tlast                       
+  .m_axis_dout_tlast        ( w_m_div_tfirst        ), // output wire m_axis_dout_tlast                       
   .m_axis_dout_tdata        ( w_m_div_tdata         )  // output wire [63 : 0] m_axis_dout_tdata              
 );    
 
@@ -350,24 +394,36 @@ cdf_divide cdf_divide (
 // add address info to LUT data:
 reg  [ 7:0] r_lut;
 reg  [$clog2(P_MAX_TILE-1)*2+PW_IMG-1:0] r_lut_addr = 'b0;
-reg         r_lut_dv;
+reg         r_lut_dv; 
+reg         r_picture_last_d;
 always @( posedge(CLK) )
     begin
-        r_lut_dv <= w_m_div_tvalid;
-        if ( w_m_div_tvalid )
+        r_lut_dv         <= w_m_div_tvalid;
+        r_picture_last_d <= w_m_div_img_talst;
+        if ( r_picture_last_d )
             begin
-//                if ( w_m_div_tlast )
-//                    begin
-//                        if ( r_lut_addr[PW_IMG +: $clog2(P_MAX_TILE-1)] == r_clahe_tiles_minus_one )
-//                            begin
-//                            r_lut_addr[PW_IMG +: $clog2(P_MAX_TILE-1)] <= 'b0;
-                            
-//                            end
-//                        else
-//                            r_lut_addr[PW_IMG +: $clog2(P_MAX_TILE-1)] <= r_lut_addr[PW_IMG +: $clog2(P_MAX_TILE-1)] + 1'b1;
-//                    end
-                    
-                if ( w_m_div_tlast )
+                r_lut_addr[PW_IMG +: $clog2(P_MAX_TILE-1)] <= 'b0;
+                r_lut_addr[(PW_IMG+ $clog2(P_MAX_TILE-1)) +: $clog2(P_MAX_TILE-1)] <= 'b0; 
+            end
+        else if ( w_m_div_tvalid )
+            begin
+                if ( &r_lut_addr[PW_IMG-1:0] )
+                    begin
+                        if ( r_lut_addr[PW_IMG +: $clog2(P_MAX_TILE-1)] == r_clahe_tiles_minus_one )
+                            begin
+                                r_lut_addr[PW_IMG +: $clog2(P_MAX_TILE-1)] <= 'b0; 
+                                if ( r_lut_addr[(PW_IMG+ $clog2(P_MAX_TILE-1)) +: $clog2(P_MAX_TILE-1)] == r_clahe_tiles_minus_one ) 
+                                    r_lut_addr[(PW_IMG+ $clog2(P_MAX_TILE-1)) +: $clog2(P_MAX_TILE-1)] <= 'b0;   
+                                else
+                                    r_lut_addr[(PW_IMG+ $clog2(P_MAX_TILE-1)) +: $clog2(P_MAX_TILE-1)] <= r_lut_addr[(PW_IMG+ $clog2(P_MAX_TILE-1)) +: $clog2(P_MAX_TILE-1)] + 1'b1;
+                            end
+                        else
+                            r_lut_addr[PW_IMG +: $clog2(P_MAX_TILE-1)] <= r_lut_addr[PW_IMG +: $clog2(P_MAX_TILE-1)] + 1'b1;
+                    end
+            end
+        if ( w_m_div_tvalid )
+            begin 
+                if ( w_m_div_tfirst )
                     r_lut_addr[PW_IMG-1:0] <= 'b0;
                 else  
                     r_lut_addr[PW_IMG-1:0] <= r_lut_addr[PW_IMG-1:0] + 1'b1;
@@ -379,6 +435,9 @@ always @( posedge(CLK) )
             end
     end
 
+assign LUT_DOUT      = r_lut;
+assign LUT_DOUT_DV   = r_lut_dv;
+assign LUT_DOUT_ADDR = r_lut_addr;
     
 endmodule
 `default_nettype wire
