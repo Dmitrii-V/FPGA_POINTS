@@ -23,11 +23,11 @@
 
 module tb_slam
 #(
-    parameter PH_CLIP_VAL           =  253,
+    parameter PH_CLIP_VAL           =    9,
     parameter P_USE_IMG_GENERATOR   =    0,
     parameter P_MAX_TILE            =    8,
-    parameter P_MAX_W               =  1920,
-    parameter P_MAX_H               =  1080,
+    parameter P_MAX_W               =  320,//1920,
+    parameter P_MAX_H               =  240,//1080,
     parameter PW_IMG                =    8
 );
 

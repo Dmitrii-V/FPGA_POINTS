@@ -153,6 +153,23 @@ clahe_lut
     .IMG_DOUT_TLAST  ( w_img_clahe_result_tlast    )  // out,  
     ); 
 
+harris_corner 
+#( 
+    .P_MAX_W      ( P_MAX_W       ),
+    .P_MAX_H      ( P_MAX_H       ),
+    .PW_IMG       ( PW_IMG        )
+)harris_corner(
+    .CLK            ( CLK                       ), // input                  
+    .RST            ( RST                       ), // input                  
+                                 
+    .IMG_DIN_TDATA  ( w_img_clahe_result_tdata  ), // input  [PW_IMG-1:0]    
+    .IMG_DIN_TVALID ( w_img_clahe_result_tvalid ), // input                  
+    .IMG_DIN_TREADY ( w_img_clahe_result_tready ), // output                 
+    .IMG_DIN_TLAST  ( w_img_clahe_result_tlast  )  // input 
+    );
+
+
+
 
 integer f_lut = -1;
 always @(posedge(CLK))
