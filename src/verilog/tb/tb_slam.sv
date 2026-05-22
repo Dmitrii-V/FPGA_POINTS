@@ -23,14 +23,15 @@
 
 module tb_slam
 #(
-    parameter P_MAX_TILE =    8,
-    parameter P_MAX_W    = 320,
-    parameter P_MAX_H    = 240,
-    parameter PW_IMG     =    8
+    parameter PH_CLIP_VAL           =  253,
+    parameter P_USE_IMG_GENERATOR   =    0,
+    parameter P_MAX_TILE            =    8,
+    parameter P_MAX_W               =  1920,
+    parameter P_MAX_H               =  1080,
+    parameter PW_IMG                =    8
 );
 
 
-parameter P_USE_IMG_GENERATOR = 1;
 
 reg CLK = 0;
 reg RST = 0;
@@ -58,10 +59,11 @@ end
 
 slam_top 
 #(
-    .P_MAX_TILE ( P_MAX_TILE ),
-    .P_MAX_W    ( P_MAX_W    ),
-    .P_MAX_H    ( P_MAX_H    ),
-    .PW_IMG     ( PW_IMG     )
+    .PH_CLIP_VAL( PH_CLIP_VAL ),
+    .P_MAX_TILE ( P_MAX_TILE  ),
+    .P_MAX_W    ( P_MAX_W     ),
+    .P_MAX_H    ( P_MAX_H     ),
+    .PW_IMG     ( PW_IMG      )
 ) slam_top (
     .CLK             ( CLK              ), //  in,              
     .RST             ( RST              ), //  in,               
@@ -125,6 +127,37 @@ generate
                         end
                 end
         end
+    else // read from file
+        begin
+            integer f_img = - 1;
+            reg [31:0] r_pix_cnt = 0;
+            always @(posedge(CLK))
+                begin
+                    if ( f_img == -1 )
+                        begin
+                        f_img = $fopen("D:/tmp/vivado_sigs/img_test.txt", "r");
+                        r_pix_cnt = 0;
+                        end
+                    else
+                        begin
+                            if ( r_init_done && ~w_prog_full )
+                                begin
+                                    $fscanf(f_img, "%d\n", r_img_din_tdata);
+                                    r_img_din_tvalid <= 1'b1;
+                                    r_img_din_tlast  <= (r_pix_cnt == P_MAX_H*P_MAX_W-1) ? 1'b1: 1'b0;
+                                    r_pix_cnt        <= r_pix_cnt  +1;
+                                end
+                            else
+                                begin
+                                    r_img_din_tdata  <= r_img_din_tdata;
+                                    r_img_din_tvalid <= 1'b0;
+                                    r_img_din_tlast  <= 1'b0;
+                                end
+                        end
+                        
+                end    
+        end
+    
 endgenerate        
 initial begin
     r_init_done = 0;

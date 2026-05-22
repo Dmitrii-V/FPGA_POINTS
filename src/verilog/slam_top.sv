@@ -42,10 +42,11 @@ slam_top
 */
 module slam_top
 #(
-    parameter P_MAX_TILE =    8,
-    parameter P_MAX_W    = 1920,
-    parameter P_MAX_H    = 1080,
-    parameter PW_IMG     =    8
+    parameter PH_CLIP_VAL =    8,
+    parameter P_MAX_TILE  =    8,
+    parameter P_MAX_W     = 1920,
+    parameter P_MAX_H     = 1080,
+    parameter PW_IMG      =    8
 )(
     input  wire              CLK,
     input  wire              RST,
@@ -83,6 +84,7 @@ wire                    w_img_clahe_result_tlast   ;
 
 clahe_hist 
 #(
+    .PH_CLIP_VAL( PH_CLIP_VAL ),
     .P_MAX_TILE ( P_MAX_TILE  ),
     .P_MAX_W    ( P_MAX_W     ),
     .P_MAX_H    ( P_MAX_H     ),
@@ -109,7 +111,18 @@ clahe_hist
     .IMG_DOUT_TREADY ( w_img_clahe_to_ddr_tready ), //  in,            
     .IMG_DOUT_TLAST  ( w_img_clahe_to_ddr_tlast  )  // out,  
     ); 
-
+ddr_imit ddr_imit(
+    .CLK                ( CLK                         ), // input ,             
+    .RST                ( RST                         ), // input ,              
+    .IMG_DIN_GS_TDATA   ( w_img_clahe_to_ddr_tdata    ), // input ,[PW_DIN-1:0] 
+    .IMG_DIN_GS_TVALID  ( w_img_clahe_to_ddr_tvalid   ), // input ,             
+    .IMG_DIN_GS_TREADY  ( w_img_clahe_to_ddr_tready   ), // output,             
+    .IMG_DIN_GS_TLAST   ( w_img_clahe_to_ddr_tlast    ), // input ,              
+    .IMG_DOUT_GS_TVALID ( w_img_clahe_from_ddr_tvalid ), // output,             
+    .IMG_DOUT_GS_TDATA  ( w_img_clahe_from_ddr_tdata  ), // output,[PW_DIN-1:0] 
+    .IMG_DOUT_GS_TREADY ( w_img_clahe_from_ddr_tready ), // input ,             
+    .IMG_DOUT_GS_TLAST  ( w_img_clahe_from_ddr_tlast  )  // output,             
+    );
 
 clahe_lut 
 #(
@@ -140,18 +153,6 @@ clahe_lut
     .IMG_DOUT_TLAST  ( w_img_clahe_result_tlast    )  // out,  
     ); 
 
-fifo_ddr_imitator_clahe fifo_ddr_imitator_clahe (
-  .s_axis_aresetn   ( !RST                        ), // input wire s_axis_aresetn         
-  .s_axis_aclk      ( CLK                         ), // input wire s_axis_aclk       
-  .s_axis_tdata     ( w_img_clahe_to_ddr_tdata    ), // input wire [7 : 0] s_axis_tdata                 
-  .s_axis_tvalid    ( w_img_clahe_to_ddr_tvalid   ), // input wire s_axis_tvalid           
-  .s_axis_tready    ( w_img_clahe_to_ddr_tready   ), // output wire s_axis_tready         
-  .s_axis_tlast     ( w_img_clahe_to_ddr_tlast    ), // input wire s_axis_tlast          
-  .m_axis_tdata     ( w_img_clahe_from_ddr_tdata  ), // output wire [7 : 0] m_axis_tdata           
-  .m_axis_tvalid    ( w_img_clahe_from_ddr_tvalid ), // output wire m_axis_tvalid          
-  .m_axis_tready    ( w_img_clahe_from_ddr_tready ), // input wire m_axis_tready         
-  .m_axis_tlast     ( w_img_clahe_from_ddr_tlast  )  // output wire m_axis_tlast             
-);
 
 integer f_lut = -1;
 always @(posedge(CLK))

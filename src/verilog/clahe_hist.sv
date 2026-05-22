@@ -52,11 +52,13 @@ clahe_hist
 */
 module clahe_hist
 #(
-    parameter P_MAX_TILE  =    8,
-    parameter P_MAX_W     = 1920,
-    parameter P_MAX_H     = 1080,
-    parameter PW_IMG      =    8,
-    parameter PW_LUT_ADDR =    PW_IMG + $clog2(P_MAX_TILE-1) + $clog2(P_MAX_TILE-1) 
+    parameter PH_CLIP_VAL  =   37,
+    parameter P_MAX_TILE   =    8,
+    parameter P_MAX_W      = 1920,
+    parameter P_MAX_H      = 1080,
+    parameter PH_TOTAL_PIX =   P_MAX_W*P_MAX_H/P_MAX_TILE/P_MAX_TILE,
+    parameter PW_IMG       =    8,
+    parameter PW_LUT_ADDR  =    PW_IMG + $clog2(P_MAX_TILE-1) + $clog2(P_MAX_TILE-1) 
 )(
     input  wire                     CLK,
     input  wire                     RST,
@@ -93,7 +95,7 @@ always @(posedge(CLK))
         else
             begin
                 r_cnt            <= r_cnt;
-                r_img_din_tready <= 'b1;
+                r_img_din_tready <= 'b0;
             end
     end
  
@@ -206,15 +208,25 @@ bram_clahe_hist_count bram_clahe_hist_count (
 );
 
 
-// count hist: 
-reg  [PW_IMG-1:0] r_img_din_data    = {PW_IMG{1'b0}};
+integer f_hist = -1;
+always @(posedge(CLK))
+    begin
+        if ( f_hist == -1 )
+            f_hist = $fopen("D:/tmp/vivado_sigs/slam_hist.txt");
+        else
+            if ( w_hist_val_doutb_dv )
+                $fwrite(f_hist, "%d\n", w_hist_val_doutb);
+    end
+
+
+
+// count hist:  
 reg               r_img_din_data_dv = 1'b0;
 reg               r_img_din_data_dv_d = 1'b0;
 //reg               r_img_din_data_dv_dd = 1'b0;
 always @(posedge(CLK))
     begin
-        r_hist_val_addra    <= (IMG_DIN_TVALID & IMG_DIN_TREADY)? {r_hist_y, r_hist_x, r_img_din_data} : r_hist_val_addra;
-        r_img_din_data      <= (IMG_DIN_TVALID & IMG_DIN_TREADY)? IMG_DIN_TDATA : r_img_din_data;
+        r_hist_val_addra    <= (IMG_DIN_TVALID & IMG_DIN_TREADY)? {r_hist_y, r_hist_x, IMG_DIN_TDATA} : r_hist_val_addra; 
         r_img_din_data_dv   <=  IMG_DIN_TVALID & IMG_DIN_TREADY;
         r_img_din_data_dv_d <= r_img_din_data_dv; 
         
@@ -246,13 +258,14 @@ always @(posedge(CLK))
     end    
     
 // clip val and accum excess:
-reg  [17:0]         r_clip_thr = 9;
+reg  [17:0]         r_clip_thr = PH_CLIP_VAL;
 reg  [17:0]         r_hist_val_clipped;
 reg                 r_hist_val_clipped_first=1'b0; 
 reg  [13:0]         r_hist_val_clipped_addr;
 reg                 r_hist_val_clipped_dv;
 reg  [PW_IMG+17:0]  r_hist_val_excess = 'b0; 
 reg  [17:0]         r_hist_val_add_saved = 'b0;
+reg                 r_div_excess_strobe = 1'b0;
 always @(posedge(CLK))
     begin
         r_hist_val_clipped_dv   <= w_hist_val_doutb_dv;
@@ -275,8 +288,8 @@ always @(posedge(CLK))
                 else
                     r_hist_val_clipped <= w_hist_val_doutb;
             end
-        
-        if (w_hist_val_doutb_dv && w_hist_val_doutb_addr[PW_IMG-1:0] == 0 )
+        r_div_excess_strobe <= w_hist_val_doutb_dv && (&w_hist_val_doutb_addr[PW_IMG-1:0]) ;
+        if ( r_div_excess_strobe )
             begin  
                 if ( r_hist_val_excess >= (2**PW_IMG) )
                     r_hist_val_add_saved <= r_hist_val_excess[PW_IMG +: 18]; 
@@ -318,9 +331,10 @@ always @(posedge(CLK))
                     end
             end
     end    
+ 
     
 // find first non-zero value and sub it form all other values:
-reg  [       18:0] r_total_pix = 'd1200;
+reg  [       18:0] r_total_pix = PH_TOTAL_PIX;
 reg  [       18:0] r_denom     = 'd1;
 reg  [PW_IMG+17:0] r_cdf_min = 'b0;
 reg  [PW_IMG+17:0] r_cdf_m = 'b0;
@@ -356,6 +370,10 @@ always @(posedge(CLK))
             end
     end    
 
+
+
+
+
 wire [PW_IMG+17+PW_IMG:0] w_cdf_255x = {r_cdf_m, 8'b0} - {8'b0, r_cdf_m};
 wire [23:0] w_divisor = {5'b0, r_denom};     
 wire [39:0] s_axis_dividend_tdata = { {(40-PW_IMG*2-18){1'b0}}, w_cdf_255x};
@@ -364,6 +382,7 @@ wire        w_m_div_tfirst;
 wire        w_m_div_img_talst;
 wire [63:0] w_m_div_tdata ;     
 wire [33:0] w_quot = w_m_div_tdata[57:24];
+wire [19:0] w_rem  = w_m_div_tdata[19: 0];
 cdf_divide cdf_divide (
   .aclk                     ( CLK                   ), // input wire aclk                                                                
   .s_axis_divisor_tvalid    ( r_cdf_m_dv            ), // input wire s_axis_divisor_tvalid            
@@ -375,7 +394,15 @@ cdf_divide cdf_divide (
   .m_axis_dout_tlast        ( w_m_div_tfirst        ), // output wire m_axis_dout_tlast                       
   .m_axis_dout_tdata        ( w_m_div_tdata         )  // output wire [63 : 0] m_axis_dout_tdata              
 );    
-
+integer f_cdf = -1;
+always @(posedge(CLK))
+    begin
+        if ( f_cdf == -1 )
+            f_cdf = $fopen("D:/tmp/vivado_sigs/slam_cdf.txt");
+        else
+            if ( w_m_div_tvalid )
+                $fwrite(f_cdf, "%d\n",w_quot[31:0]);
+    end
 
 // add address info to LUT data:
 reg  [ 7:0] r_lut;
