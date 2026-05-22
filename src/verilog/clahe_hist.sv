@@ -96,18 +96,7 @@ always @(posedge(CLK))
                 r_img_din_tready <= 'b1;
             end
     end
-// define reg, but want it to be BRAM..
-reg [$clog2(P_MAX_W*P_MAX_H)-1:0] r_hist_bram [0:P_MAX_TILE-1][0:P_MAX_TILE-1][0:(2**PW_IMG)-1];    
-initial begin
-    for ( integer i = 0; i < P_MAX_TILE; i = i + 1 )
-        begin
-            for ( integer ii = 0; ii < P_MAX_TILE; ii = ii + 1 )
-                begin
-                    for ( integer iii = 0; iii <  (2**PW_IMG); iii = iii + 1 )
-                        r_hist_bram[i][ii][iii] = 0;
-                end
-        end
-end
+ 
 
 
 fifo_clahe_axis_dout fifo_clahe_axis_dout (
@@ -224,24 +213,21 @@ reg               r_img_din_data_dv_d = 1'b0;
 //reg               r_img_din_data_dv_dd = 1'b0;
 always @(posedge(CLK))
     begin
-        r_hist_val_addra  <= (IMG_DIN_TVALID & IMG_DIN_TREADY)? {r_hist_y, r_hist_x, r_img_din_data} : r_hist_val_addra;
-        r_hist_val_addrb_d<= r_hist_val_addrb;
-        r_img_din_data    <= (IMG_DIN_TVALID & IMG_DIN_TREADY)? IMG_DIN_TDATA : r_img_din_data;
-        r_img_din_data_dv <=  IMG_DIN_TVALID & IMG_DIN_TREADY;
-        r_img_din_data_dv_d <= r_img_din_data_dv;
-        //r_img_din_data_dv_dd <= r_img_din_data_dv_d;
+        r_hist_val_addra    <= (IMG_DIN_TVALID & IMG_DIN_TREADY)? {r_hist_y, r_hist_x, r_img_din_data} : r_hist_val_addra;
+        r_img_din_data      <= (IMG_DIN_TVALID & IMG_DIN_TREADY)? IMG_DIN_TDATA : r_img_din_data;
+        r_img_din_data_dv   <=  IMG_DIN_TVALID & IMG_DIN_TREADY;
+        r_img_din_data_dv_d <= r_img_din_data_dv; 
         
         r_hist_val_dina <= w_hist_val_douta + 1'b1;
         r_hist_val_wr_a <= r_img_din_data_dv_d;
-        
-        if( r_img_din_data_dv )
-            r_hist_bram[r_hist_y][r_hist_x][r_img_din_data] <= r_hist_bram[r_hist_y][r_hist_x][r_img_din_data] + 1'b1; 
+         
     end 
     
 // read hist:
 always @(posedge(CLK))
     begin
         r_hist_val_dv_b <= r_hist_zero_wr_b;
+        r_hist_val_addrb_d<= r_hist_val_addrb;
         if ( r_tile_line_done )
             begin
                 r_hist_val_addrb <= {r_hist_val_addra[$clog2(P_MAX_TILE-1) + PW_IMG +: $clog2(P_MAX_TILE-1)  ], {($clog2(P_MAX_TILE-1)){1'b0}}, 8'b0};

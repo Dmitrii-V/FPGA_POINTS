@@ -129,9 +129,9 @@ clahe_lut
     .IMG_DIN_TLAST   ( w_img_clahe_from_ddr_tlast  ), //  in,             
     
     // CLAHE Lut result:
-    .LUT_DOUT        ( w_lut_data                  ), //  in, [PW_IMG-1:0] 
-    .LUT_DOUT_ADDR   ( w_lut_data_addr             ), //  in, [PW_LUT_ADDR-1:0]
-    .LUT_DOUT_DV     ( w_lut_data_dv               ), //  in, 
+    .LUT_DIN         ( w_lut_data                  ), //  in, [PW_IMG-1:0] 
+    .LUT_DIN_ADDR    ( w_lut_data_addr             ), //  in, [PW_LUT_ADDR-1:0]
+    .LUT_DIN_DV      ( w_lut_data_dv               ), //  in, 
     
     // Grayscale Image after CLAHE to Harris: 
     .IMG_DOUT_TDATA  ( w_img_clahe_result_tdata    ), // out, [PW_IMG-1:0] 
@@ -141,7 +141,7 @@ clahe_lut
     ); 
 
 fifo_ddr_imitator_clahe fifo_ddr_imitator_clahe (
-  .s_axis_aresetn   ( RST                         ), // input wire s_axis_aresetn         
+  .s_axis_aresetn   ( !RST                        ), // input wire s_axis_aresetn         
   .s_axis_aclk      ( CLK                         ), // input wire s_axis_aclk       
   .s_axis_tdata     ( w_img_clahe_to_ddr_tdata    ), // input wire [7 : 0] s_axis_tdata                 
   .s_axis_tvalid    ( w_img_clahe_to_ddr_tvalid   ), // input wire s_axis_tvalid           
@@ -152,6 +152,26 @@ fifo_ddr_imitator_clahe fifo_ddr_imitator_clahe (
   .m_axis_tready    ( w_img_clahe_from_ddr_tready ), // input wire m_axis_tready         
   .m_axis_tlast     ( w_img_clahe_from_ddr_tlast  )  // output wire m_axis_tlast             
 );
+
+integer f_lut = -1;
+always @(posedge(CLK))
+    begin
+        if ( f_lut == -1 )
+            f_lut = $fopen("D:/tmp/vivado_sigs/slam_lut.txt");
+        else
+            if ( w_lut_data_dv )
+                $fwrite(f_lut, "%d %d\n", w_lut_data_addr, w_lut_data);
+    end
+    
+integer f_lut_dout = -1;
+always @(posedge(CLK))
+    begin
+        if ( f_lut_dout == -1 )
+            f_lut_dout = $fopen("D:/tmp/vivado_sigs/slam_lut_dout.txt");
+        else
+            if ( w_img_clahe_result_tvalid )
+                $fwrite(f_lut_dout, "%d\n", w_img_clahe_result_tdata);
+    end
     
 endmodule
 `default_nettype wire

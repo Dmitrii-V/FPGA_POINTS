@@ -29,6 +29,9 @@ module tb_slam
     parameter PW_IMG     =    8
 );
 
+
+parameter P_USE_IMG_GENERATOR = 1;
+
 reg CLK = 0;
 reg RST = 0;
 wire [PW_IMG-1:0]   w_img_din_tdata ;
@@ -89,35 +92,40 @@ axis_data_fifo_0 axis_data_fifo_0 (
 reg r_init_done = 1'b0;
 reg [15:0] r_cnt_x = 0;
 reg [15:0] r_cnt_y = 0;
-always @( posedge(CLK) )
-    begin
-        if ( r_init_done && ~w_prog_full )
-            begin
-                if ( r_img_din_tdata == 'd31)
-                    r_img_din_tdata  <= 'b0;
-                else
-                    r_img_din_tdata  <= r_img_din_tdata + 1;
-                r_img_din_tvalid <= 1'b1;
-                r_img_din_tlast  <= ( r_cnt_y == (P_MAX_H-1)) & ( r_cnt_x == (P_MAX_W-1) );
-                if ( r_cnt_x == (P_MAX_W-1) )
-                    begin
-                        r_cnt_x <= 0;
-                        if ( r_cnt_y == (P_MAX_H-1))
-                            r_cnt_y <= 'b0;
-                        else
-                            r_cnt_y <= r_cnt_y + 1;
-                    end
-                else
-                    r_cnt_x <= r_cnt_x + 1;
-            end
-        else
-            begin
-                r_img_din_tdata  <= r_img_din_tdata;
-                r_img_din_tvalid <= 1'b0;
-                r_img_din_tlast  <= 1'b0;
-            end
-    end
 
+generate
+    if ( P_USE_IMG_GENERATOR )
+        begin
+            always @( posedge(CLK) )
+                begin
+                    if ( r_init_done && ~w_prog_full )
+                        begin
+                            if ( r_img_din_tdata == 'd31)
+                                r_img_din_tdata  <= 'b0;
+                            else
+                                r_img_din_tdata  <= r_img_din_tdata + 1;
+                            r_img_din_tvalid <= 1'b1;
+                            r_img_din_tlast  <= ( r_cnt_y == (P_MAX_H-1)) & ( r_cnt_x == (P_MAX_W-1) );
+                            if ( r_cnt_x == (P_MAX_W-1) )
+                                begin
+                                    r_cnt_x <= 0;
+                                    if ( r_cnt_y == (P_MAX_H-1))
+                                        r_cnt_y <= 'b0;
+                                    else
+                                        r_cnt_y <= r_cnt_y + 1;
+                                end
+                            else
+                                r_cnt_x <= r_cnt_x + 1;
+                        end
+                    else
+                        begin
+                            r_img_din_tdata  <= r_img_din_tdata;
+                            r_img_din_tvalid <= 1'b0;
+                            r_img_din_tlast  <= 1'b0;
+                        end
+                end
+        end
+endgenerate        
 initial begin
     r_init_done = 0;
     RST = 1;
