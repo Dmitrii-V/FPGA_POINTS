@@ -441,10 +441,10 @@ always @( posedge(CLK) )
                 else  
                     r_lut_addr[PW_IMG-1:0] <= r_lut_addr[PW_IMG-1:0] + 1'b1;
                 
-                if ( w_quot >= 256 )
+                if ( w_quot >= 255 )
                     r_lut <= 'd255;
                 else
-                    r_lut <= w_quot[7:0];
+                    r_lut <= w_quot[7:0] + 1'b1;
             end
     end
 

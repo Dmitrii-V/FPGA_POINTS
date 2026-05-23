@@ -69,17 +69,31 @@ sobel_xy
     .PW_IMG       ( PW_IMG        ),
     .PW_DOUT      ( LPW_SOBEL     ) // +2 - to mul by "-2", +3 - to sum 6 values 
 )sobel_xy(
-    .CLK              ( CLK             ), // input                  
-    .RST              ( RST             ), // input                  
-    .IMG_DIN_TDATA    ( IMG_DIN_TDATA   ), // input  [PW_IMG-1:0]    
-    .IMG_DIN_TVALID   ( IMG_DIN_TVALID  ), // input                  
-    .IMG_DIN_TREADY   ( IMG_DIN_TREADY  ), // output                 
-    .IMG_DIN_TLAST    ( IMG_DIN_TLAST   ), // input                  
+    .CLK              ( CLK               ), // input                  
+    .RST              ( RST               ), // input                  
+    .IMG_DIN_TDATA    ( IMG_DIN_TDATA     ), // input  [PW_IMG-1:0]    
+    .IMG_DIN_TVALID   ( IMG_DIN_TVALID    ), // input                  
+    .IMG_DIN_TREADY   ( IMG_DIN_TREADY    ), // output                 
+    .IMG_DIN_TLAST    ( IMG_DIN_TLAST     ), // input                  
     .IXX_DOUT         ( w_ixx_dout        ), // output [PW_DOUT-1:0]   
     .IYY_DOUT         ( w_iyy_dout        ), // output [PW_DOUT-1:0]   
     .IXY_DOUT         ( w_ixy_dout        ), // output [PW_DOUT-1:0]   
     .IXXYYXY_DOUT_DV  ( w_ixxyyxy_dout_dv )  // output                 
     );    
+
+
+integer f_sobel = -1;
+always @(posedge(CLK))
+    begin
+        if ( f_sobel == -1 )
+            f_sobel = $fopen("D:/tmp/vivado_sigs/sobel_matrices.txt");
+        else
+            begin
+                if ( w_ixxyyxy_dout_dv )
+                    $fwrite(f_sobel, "%d %d %d\n", w_ixx_dout, w_iyy_dout, w_ixy_dout);
+            end
+            
+    end
     
     
 endmodule
