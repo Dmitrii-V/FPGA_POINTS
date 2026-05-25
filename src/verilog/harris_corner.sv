@@ -46,6 +46,7 @@ module harris_corner
 )(
     input  wire                 CLK,
     input  wire                 RST,
+    output wire                 ERROR_WR_ON_APPEND,
     
     input  wire [PW_IMG-1:0]    IMG_DIN_TDATA,
     input  wire                 IMG_DIN_TVALID,
@@ -60,6 +61,7 @@ wire [LPW_SOBEL-1:0] w_ixx_dout       ;
 wire [LPW_SOBEL-1:0] w_iyy_dout       ;    
 wire [LPW_SOBEL-1:0] w_ixy_dout       ;    
 wire                 w_ixxyyxy_dout_dv;    
+wire                 w_ixxyyxy_dout_last;    
     
 sobel_xy 
 #(
@@ -69,16 +71,18 @@ sobel_xy
     .PW_IMG       ( PW_IMG        ),
     .PW_DOUT      ( LPW_SOBEL     ) // +2 - to mul by "-2", +3 - to sum 6 values 
 )sobel_xy(
-    .CLK              ( CLK               ), // input                  
-    .RST              ( RST               ), // input                  
-    .IMG_DIN_TDATA    ( IMG_DIN_TDATA     ), // input  [PW_IMG-1:0]    
-    .IMG_DIN_TVALID   ( IMG_DIN_TVALID    ), // input                  
-    .IMG_DIN_TREADY   ( IMG_DIN_TREADY    ), // output                 
-    .IMG_DIN_TLAST    ( IMG_DIN_TLAST     ), // input                  
-    .IXX_DOUT         ( w_ixx_dout        ), // output [PW_DOUT-1:0]   
-    .IYY_DOUT         ( w_iyy_dout        ), // output [PW_DOUT-1:0]   
-    .IXY_DOUT         ( w_ixy_dout        ), // output [PW_DOUT-1:0]   
-    .IXXYYXY_DOUT_DV  ( w_ixxyyxy_dout_dv )  // output                 
+    .CLK                ( CLK                 ), // input                  
+    .RST                ( RST                 ), // input                  
+    .ERROR_WR_ON_APPEND ( ERROR_WR_ON_APPEND  ), // input                  
+    .IMG_DIN_TDATA      ( IMG_DIN_TDATA       ), // input  [PW_IMG-1:0]    
+    .IMG_DIN_TVALID     ( IMG_DIN_TVALID      ), // input                  
+    .IMG_DIN_TREADY     ( IMG_DIN_TREADY      ), // output                 
+    .IMG_DIN_TLAST      ( IMG_DIN_TLAST       ), // input                  
+    .IXX_DOUT           ( w_ixx_dout          ), // output [PW_DOUT-1:0]   
+    .IYY_DOUT           ( w_iyy_dout          ), // output [PW_DOUT-1:0]   
+    .IXY_DOUT           ( w_ixy_dout          ), // output [PW_DOUT-1:0]   
+    .IXXYYXY_DOUT_DV    ( w_ixxyyxy_dout_dv   ), // output                 
+    .IXXYYXY_DOUT_LAST  ( w_ixxyyxy_dout_last )  // output                 
     );    
 
 

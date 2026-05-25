@@ -134,9 +134,11 @@ always @( posedge(CLK) )
 reg  [PW_LUT_ADDR-1:0] r_lut_addrb;
 reg                    r_lut_addrb_dv;
 reg                    r_lut_addrb_dv_d;
+reg                    r_lut_addrb_last;
+reg                    r_lut_addrb_last_d;
 wire [PW_IMG-1:0]      w_lut_dout; 
-wire                   w_lut_dout_dv = r_lut_addrb_dv_d; 
-wire                   w_lut_dout_last;
+wire                   w_lut_dout_dv   = r_lut_addrb_dv_d; 
+wire                   w_lut_dout_last = r_lut_addrb_last_d;
  
 bram_clahe_lut bram_clahe_lut (
   .clka     ( CLK           ), // input wire clka             
@@ -154,15 +156,17 @@ reg               r_img_din_data_dv_d = 1'b0;
 //reg               r_img_din_data_dv_dd = 1'b0;
 always @(posedge(CLK))
     begin
-        r_lut_addrb      <= (IMG_DIN_TVALID & IMG_DIN_TREADY)? {r_hist_y, r_hist_x, IMG_DIN_TDATA} : r_lut_addrb;
-        r_lut_addrb_dv   <=  IMG_DIN_TVALID & IMG_DIN_TREADY;
-        r_lut_addrb_dv_d <= r_lut_addrb_dv;   
+        r_lut_addrb        <= (IMG_DIN_TVALID & IMG_DIN_TREADY)? {r_hist_y, r_hist_x, IMG_DIN_TDATA} : r_lut_addrb;
+        r_lut_addrb_dv     <= IMG_DIN_TVALID & IMG_DIN_TREADY;
+        r_lut_addrb_dv_d   <= r_lut_addrb_dv;   
+        r_lut_addrb_last   <= IMG_DIN_TLAST;
+        r_lut_addrb_last_d <= r_lut_addrb_last;
     end     
      
 assign IMG_DOUT_TDATA  = w_lut_dout; 
 assign IMG_DOUT_TVALID = w_lut_dout_dv;
 //assign IMG_DOUT_TREADY,  
-assign IMG_DOUT_TLAST  = 1'b0;
+assign IMG_DOUT_TLAST  = w_lut_dout_last;
     
 endmodule
 `default_nettype wire

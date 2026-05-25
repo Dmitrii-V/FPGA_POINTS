@@ -64,6 +64,9 @@ module slam_top
  
 localparam LP_LUT_ADDR = PW_IMG + 2*$clog2(P_MAX_TILE); 
 
+
+wire w_err_harris_wr_on_append;
+
 wire [PW_IMG-1:0]       w_lut_data     ;
 wire [LP_LUT_ADDR-1:0]  w_lut_data_addr;
 wire                    w_lut_data_dv  ;
@@ -159,13 +162,14 @@ harris_corner
     .P_MAX_H      ( P_MAX_H       ),
     .PW_IMG       ( PW_IMG        )
 )harris_corner(
-    .CLK            ( CLK                       ), // input                  
-    .RST            ( RST                       ), // input                  
+    .CLK                    ( CLK                       ), // input                  
+    .RST                    ( RST                       ), // input                  
+    .ERROR_WR_ON_APPEND     ( w_err_harris_wr_on_append ), // input                  
                                  
-    .IMG_DIN_TDATA  ( w_img_clahe_result_tdata  ), // input  [PW_IMG-1:0]    
-    .IMG_DIN_TVALID ( w_img_clahe_result_tvalid ), // input                  
-    .IMG_DIN_TREADY ( w_img_clahe_result_tready ), // output                 
-    .IMG_DIN_TLAST  ( w_img_clahe_result_tlast  )  // input 
+    .IMG_DIN_TDATA          ( w_img_clahe_result_tdata  ), // input  [PW_IMG-1:0]    
+    .IMG_DIN_TVALID         ( w_img_clahe_result_tvalid ), // input                  
+    .IMG_DIN_TREADY         ( w_img_clahe_result_tready ), // output                 
+    .IMG_DIN_TLAST          ( w_img_clahe_result_tlast  )  // input 
     );
 
 

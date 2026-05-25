@@ -140,7 +140,7 @@ generate
                         end
                     else
                         begin
-                            if ( r_init_done && ~w_prog_full )
+                            if ( r_init_done && ~w_prog_full && r_pix_cnt < P_MAX_H*P_MAX_W )
                                 begin
                                     $fscanf(f_img, "%d\n", r_img_din_tdata);
                                     r_img_din_tvalid <= 1'b1;
