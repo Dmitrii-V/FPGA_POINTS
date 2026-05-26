@@ -94,7 +94,7 @@ always @(posedge(CLK))
         else
             begin
                 if ( w_ixxyyxy_dout_dv )
-                    $fwrite(f_sobel, "%d %d %d\n", w_ixx_dout, w_iyy_dout, w_ixy_dout);
+                    $fwrite(f_sobel, "%d %d %d\n", w_ixx_dout, w_iyy_dout, $signed(w_ixy_dout));
             end
             
     end

@@ -70,6 +70,16 @@ module sobel_xy
 
 assign IMG_DIN_TREADY = 1'b1;
 
+
+localparam LP_APPEND_LEN = 3*P_MAX_W+1;
+
+reg [$clog2(P_MAX_W)-1:0]       r_width                = P_MAX_W;
+reg [$clog2(P_MAX_W)-1:0]       r_width_minus_one      = P_MAX_W - 1'b1;
+reg [$clog2(P_MAX_H)-1:0]       r_height_minus_one     = P_MAX_H - 1'b1;
+reg [$clog2(LP_APPEND_LEN)-1:0] r_append_len           = LP_APPEND_LEN;
+reg [$clog2(LP_APPEND_LEN)-1:0] r_append_len_minus_one = LP_APPEND_LEN - 1'b1;
+
+
 reg  [$clog2(P_MAX_W)-1:0]     r_fifo_cnt;
 wire [P_SOBEL_SIZE*PW_IMG-1:0] w_fifo_dout;
 wire [P_SOBEL_SIZE*PW_IMG-1:0] w_fifo_din;
@@ -82,7 +92,6 @@ wire                           w_fifo_empty;
 reg  [ 7:0] r_fifo_din_pix    =  'b0;
 reg         r_fifo_din_pix_dv = 1'b0;
 reg         r_fifo_din_pix_last = 1'b0;
-localparam LP_APPEND_LEN = 3*P_MAX_W;
 reg  [$clog2(LP_APPEND_LEN)-1:0] r_append_cnt = 'b0;
 reg                              r_append_en  = 1'b0;
 assign ERROR_WR_ON_APPEND = r_append_en & IMG_DIN_TVALID & IMG_DIN_TREADY;
@@ -90,7 +99,7 @@ always @( posedge(CLK) )
     begin
         
         r_fifo_din_pix_dv   <= (IMG_DIN_TVALID & IMG_DIN_TREADY) | r_append_en;
-        r_fifo_din_pix_last <= r_append_en  && (r_append_cnt == LP_APPEND_LEN-1);
+        r_fifo_din_pix_last <= r_append_en  && (r_append_cnt == r_append_len_minus_one );
         if ( IMG_DIN_TVALID & IMG_DIN_TREADY )
             r_fifo_din_pix <= IMG_DIN_TDATA; 
         else
@@ -98,11 +107,12 @@ always @( posedge(CLK) )
             
         if ( IMG_DIN_TVALID & IMG_DIN_TREADY & IMG_DIN_TLAST )
             r_append_en <= 1'b1;
-        else if ( r_append_cnt == LP_APPEND_LEN-1 )
+        else if ( r_append_cnt == r_append_len_minus_one )
             r_append_en <= 1'b0;
+            
         if ( IMG_DIN_TVALID & IMG_DIN_TREADY & IMG_DIN_TLAST )
             r_append_cnt <= 'b0;
-        else if ( r_append_cnt < LP_APPEND_LEN )
+        else if ( r_append_cnt < r_append_len )
             r_append_cnt <= r_append_cnt + 1'b1; 
             
     end
@@ -300,11 +310,57 @@ always @( posedge(CLK) )
         else if ( w_i_xx_yy_xy_dv )
             r_dout_cnt <= r_dout_cnt + 1'b1; 
     end
-assign IXX_DOUT          = w_ixx;      
-assign IYY_DOUT          = w_iyy;
-assign IXY_DOUT          = w_ixy;
-assign IXXYYXY_DOUT_DV   = w_i_xx_yy_xy_dv && (r_dout_cnt > (P_MAX_W-1));  
-assign IXXYYXY_DOUT_LAST = w_i_xx_yy_xy_last && (r_dout_cnt > (P_MAX_W-1));  
+    
+    
+// filter output values:
+reg  [LPW_ADD_TREE_OUT*2-1:0] r_ixx;
+reg  [LPW_ADD_TREE_OUT*2-1:0] r_iyy;
+reg  [LPW_ADD_TREE_OUT*2-1:0] r_ixy;
+reg                           r_i_xx_yy_xy_dv;
+reg                           r_i_xx_yy_xy_last;
+reg [$clog2(P_MAX_W)-1:0] r_output_cnt_x;
+reg [$clog2(P_MAX_H)-1:0] r_output_cnt_y;
+always @(posedge(CLK))
+    begin
+        r_i_xx_yy_xy_dv   <= w_i_xx_yy_xy_dv && (r_dout_cnt > r_width );
+        r_i_xx_yy_xy_last <= w_i_xx_yy_xy_last && (r_dout_cnt > r_width );
+        r_ixx             <= ( r_output_cnt_x == 'b0 || r_output_cnt_x == r_width_minus_one  ) ? 'b0 : w_ixx;
+        r_iyy             <= ( r_output_cnt_y == 'b0 || r_output_cnt_y == r_height_minus_one ) ? 'b0 : w_iyy;
+        r_ixy             <= ( r_output_cnt_x == 'b0 || r_output_cnt_x == r_width_minus_one || 
+                             r_output_cnt_y == 'b0 || r_output_cnt_y == r_height_minus_one)  ? 'b0 : w_ixy;
+        if ( RST )
+            begin
+                r_output_cnt_x <= 'b0;
+                r_output_cnt_y <= 'b0;
+            end
+        else if ( w_i_xx_yy_xy_dv && (r_dout_cnt > r_width) )
+            begin
+                if ( r_output_cnt_x == r_width_minus_one )
+                    begin
+                        r_output_cnt_x <= 'b0;
+                        if ( r_output_cnt_y == r_height_minus_one )
+                            r_output_cnt_y <= 'b0;
+                        else
+                            r_output_cnt_y <= r_output_cnt_y + 1'b1;
+                    end
+                else
+                    begin
+                        r_output_cnt_x <= r_output_cnt_x + 1'b1;
+                        r_output_cnt_y <= r_output_cnt_y;
+                    end
+            end
+        else
+            begin
+                r_output_cnt_x <= r_output_cnt_x;
+                r_output_cnt_y <= r_output_cnt_y;
+            end
+    end    
+    
+assign IXX_DOUT          = r_ixx;      
+assign IYY_DOUT          = r_iyy;
+assign IXY_DOUT          = r_ixy;
+assign IXXYYXY_DOUT_DV   = r_i_xx_yy_xy_dv ;  
+assign IXXYYXY_DOUT_LAST = r_i_xx_yy_xy_last  ;  
     
 endmodule
 `default_nettype wire 
